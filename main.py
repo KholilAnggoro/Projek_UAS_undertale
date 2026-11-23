@@ -9,7 +9,7 @@ WIDTH, HEIGHT = 640, 480
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("LEGASI SATRIA NUSANTARA")
 clock = pygame.time.Clock()
-
+#tesp
 # Warna & Font
 BLACK, WHITE, RED = (0, 0, 0), (255, 255, 255), (235, 55, 70)
 YELLOW, GOLD, PURPLE, CYAN, GRAY = (255, 220, 60), (245, 185, 45), (155, 75, 235), (60, 225, 255), (135, 135, 150)
