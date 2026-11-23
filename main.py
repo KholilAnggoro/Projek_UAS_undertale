@@ -3,7 +3,7 @@ import random
 import math
 import os
 import sys
-
+#tes
 pygame.init()
 WIDTH, HEIGHT = 640, 480
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
