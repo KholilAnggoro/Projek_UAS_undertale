@@ -1,0 +1,25 @@
+PATCH NOTES — WIRA NUSA REBUILD
+
+1. Rebuild memakai source main.py yang tersedia, bukan patch V3/V4 sebelumnya.
+2. Sprite sheet baru transparan:
+   - Budi: 1795775541953.png
+   - Sari: 1795776162012.png
+   - Perwira Belanda: 1795776057038.png
+   - Jepang: 1795777394615.png
+   - Kentongan: 1795777183196.png
+3. Alpha transparency dipertahankan; tidak ada colorkey hitam pada crop sprite.
+4. Choice 1 Opsi 3 menjadi map scroll untuk mencari kentongan.
+5. Battle 5 menjadi map scroll untuk Sari mengumpulkan 3 paket obat sambil menghindari pengejar.
+6. Map hanya dapat dilalui pada road mask.
+7. Dialog: scene dalam frame kecil di atas; portrait berada di kotak dialog bawah, teks sejajar di sebelahnya.
+8. Asset map dan dialog dipetakan dari gambar yang tertanam dalam Draft Wira Nusa.
+9. Syntax, asset references, zip integrity, alpha sheets, dan grid-path connectivity diperiksa.
+10. Runtime Pygame belum bisa dijalankan di lingkungan pembuat.
+
+
+V5 REVISION (user screenshot feedback):
+- Map image changed to the supplied sepia panorama (2048x682).
+- Walkable road mask rebuilt from road polygons aligned to the actual 2048x682 panorama. Main street is y500-585; the market stall is excluded with a lower bypass.
+- Player/enemy sprites alpha-trimmed per cell using a Pygame-compatible alpha scan and rendered larger (player target 74x98, enemy 68x92).
+- Enemy movement is random waypoint patrol; no chase logic.
+- Contact resets Sari, all 3 medicine items, and enemy patrol start.

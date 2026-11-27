@@ -1,48 +1,42 @@
-# WIRA NUSA — 10 NOVEMBER 1945 (Draft-based build)
+# WIRA NUSA — rebuild berbasis Draft Wira Nusa
 
-This project follows the uploaded **Draft Wira Nusa** and the uploaded **Game kayak Undertale** project as the UI/gameplay reference.
+Versi ini dibuat ulang dari file `main.py` sumber yang tersedia, isi Draft Wira Nusa, gambar map desa yang tertanam di Draft, dan ZIP `Asset karakter.zip` yang baru diunggah.
 
-## Source fidelity and scope
-The uploaded draft file contains story material through **Chapter 2, Choice 2 Option 2 / Battle 6** (14 pages).
-The draft lists Chapter 2 Option 3, but does not provide its dialogue or Battle 7 content. It also does not contain Chapter 3, Battles 8–10, or the endings. The game intentionally stops at this documented boundary rather than inventing story text.
+## Menjalankan
+1. Extract ZIP ke folder baru.
+2. Buka folder `WiraNusa_REBUILD` di VS Code.
+3. Jalankan terminal di folder tersebut.
+4. Install dependency: `python -m pip install pygame-ce`
+5. Jalankan: `python main.py`
 
-## Features implemented from the uploaded draft
-- Intro with the embedded Word backgrounds: peaceful proclamation scene, conflict scene, and frontline scene.
-- Chapter 1 story with Budi and Yanto, followed by Battle 1.
-- Choice 1: Stay at frontline (Nyali), open evacuation route (Harapan), or make a coordinated tactic (Gema).
-- Option 3 contains a village overworld map; movement is restricted to the bright road paths and the player must find/interact with the kentongan.
-- Battles 2, 3, and 4 branch from Choice 1.
-- Chapter 2 with Sari and Putri.
-- Choice 2: medicine run (Nyali), care for all injured (Harapan), or strengthen refugees (Gema).
-- Battle 5: medicine objective while being chased.
-- Battle 6: collect evacuation/rescue objectives while avoiding abstract hazards.
-- Undertale-inspired UI: black screen, crisp white outlines, text box, name plaque, selectable choice boxes, battle arena, pixel heart.
-- Dialog pages wrap text and paginate if it exceeds the text box.
+## Kontrol
+- Dialog: `ENTER`, `SPACE`, atau `Z`; mouse klik juga lanjut.
+- Pilihan: `W/UP`, `S/DOWN`, `ENTER`.
+- Map: tahan `W/A/S/D` atau arrow keys untuk berjalan.
+- Choice 1 opsi 3: dekat kentongan tekan `E`; setelah ditemukan tekan `ENTER`.
+- Battle 5 map: kumpulkan 3 paket obat; hindari pengejar; setelah 3/3 tekan `ENTER`.
+- Battle map hanya membatasi kaki player pada road mask `assets/walkable_mask.png`.
 
-## Controls
-- Start: Enter or Space
-- Dialog: Z, Enter, Space, or mouse click
-- Choices: Up/Down or W/S; Enter/Space to confirm
-- Village map: WASD/Arrow keys to walk, E to interact with kentongan, Enter after finding it
-- Battle: WASD/Arrow keys to move
-- Failed battle: Enter to retry
+## Revisi utama
+- Battle 5 dan kentongan memakai panorama sepia landscape yang diberikan pengguna (2048×682).
+- Player dan musuh alpha-trim per cell agar padding transparan tidak membuat sprite kecil; target player 74×98 dan enemy 68×92, aspect ratio dipertahankan.
+- Battle 5 musuh bergerak acak pada waypoint jalan, tidak mengejar; saat tersentuh, player, 3 paket obat, dan patrol musuh reset ke awal misi.
+- Walkable mask 2048×682 mengikuti jalan horizontal, akses tangga, jalur diagonal, pendekatan jembatan, dan bypass di bawah area kios; titik kaki player dibatasi mask.
+- Sprite Budi, Sari, dan perwira Belanda memakai sprite sheet transparan dari `Asset karakter.zip`.
+- Crop sprite tidak memakai color-key hitam dan tidak memakai API Mask `get_bounding_rect`.
+- Map desa top-down dari Draft menjadi world map yang bisa di-scroll oleh kamera.
+- Player bergerak kontinu dan dibatasi road mask.
+- Choice 1 opsi 3: Budi mencari kentongan, interaksi `E`.
+- Battle 5: Sari mencari 3 paket obat di map sambil dikejar satu NPC perwira; collision memberi damage cooldown dan dapat retry.
+- Scene dialog berada di kotak kecil di bagian atas.
+- Portrait karakter berada di dalam kotak dialog bagian bawah; teks berada di sebelah portrait.
+- Dialog/flow cerita mengikuti Draft Wira Nusa. Bagian yang tidak ada di Draft tetap ditandai belum tersedia, tidak ditambahkan cerita baru.
 
-## Run
-1. Install Python 3.10+.
-2. Open a terminal in this folder.
-3. Install Pygame: `python -m pip install pygame`
-4. Run: `python main.py`
-
-## Testing status
-- Python syntax compile: checked.
-- Asset paths: checked against included assets.
-- Runtime test: not performed in this environment because Pygame is not installed here.
-
-## Update: scrollable exploration map (v3)
-- Choice 1 Option 3: Budi explores the supplied sepia Surabaya village landscape to find the kentongan. Camera scrolls horizontally; movement is WASD/arrow keys; E interacts; Enter continues once found.
-- Battle 5: Sari explores the same landscape to collect 3 medicine packages. The map camera follows the player and packages are placed along the village road.
-- Road-only movement: player collision checks the four corners against manually defined road bands on the landscape.
-- Controls are continuous while keys are held (not only one-step keydown).
-
-
-V4 visual fixes: alpha-safe sprite crop, larger map character, dialogue portrait integrated inside lower dialogue panel, compact scene inset, and kentongan branch dialogue uses village-map scene.
+## Pemeriksaan
+- `main.py` berhasil `py_compile`.
+- Semua referensi asset pada kode tersedia.
+- ZIP integrity diperiksa.
+- Transparansi alpha sprite sheet Budi/Sari/Belanda/Jepang diperiksa.
+- Road mask dibuat dari warna jalan pada map dan dibatasi koridor jalan.
+- Connectivity grid-step test berhasil dari titik awal ke kentongan dan ketiga item obat.
+- Runtime Pygame tidak dapat diuji di lingkungan pembuat karena paket Pygame tidak dapat diinstal di sini; tes runtime tetap perlu dilakukan di Windows pengguna.

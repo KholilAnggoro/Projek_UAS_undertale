@@ -63,11 +63,11 @@ def image_background(img, tint=None):
 
 # Load backgrounds and source composites
 map_img=asset("village_map.jpg")
+map_world=asset("map_panorama.png")
 intro_peace_bg=asset("intro_peace.jpg")
 intro_conflict_bg=asset("intro_conflict.jpg")
 frontline_bg=asset("frontline.jpg")
 kentongan_scene=asset("kentongan_scene.jpg")
-surabaya_overworld=asset("surabaya_overworld.png")
 kentongan_sheet=asset("Pixel Art Kentongan Village Asset Sheet.png")
 budi_dialog_asset=asset("Pixel Soldier Budi Character Sheet (1).png")
 sari_dialog_asset=asset("Sari’s Defiant Pixel Dialogue.png")
@@ -80,92 +80,93 @@ dutch_sheet2=asset("Dutch Colonial Officer Sprite Sheet (1).png")
 japan_sheet=asset("Japanese Soldier Pixel Sprite Sheet.png")
 budi_sheet2=asset("Pixel Soldier Budi Character Sheet (1).png")
 
-# Sprite sheet crop: auto find non-black pixels inside a cell, then preserve transparent background.
-def crop_sprite(sheet, col,row,cols=4,rows=4, pad=3):
-    if sheet is None: return None
-    cw=sheet.get_width()/cols; ch=sheet.get_height()/rows
-    cell=sheet.subsurface((int(col*cw),int(row*ch),max(1,int(cw)),max(1,int(ch)))).copy()
-    # black background is transparent; detect visible pixel bounds
-    cell.set_colorkey((0,0,0))
-    mask=pygame.mask.from_surface(cell)
-    # pygame-ce 2.5.x exposes get_bounding_rects(), not get_bounding_rect().
-    # Merge all visible mask rectangles into one safe crop rectangle.
-    try:
-        rects=mask.get_bounding_rects()
-    except (AttributeError, TypeError):
-        # Safe fallback: leave this frame uncropped instead of crashing.
-        return cell
-    if not rects: return cell
-    # Merge rectangles using coordinates (API-compatible) and CLIP to cell bounds.
-    left=min(r.left for r in rects)
-    top=min(r.top for r in rects)
-    right=max(r.right for r in rects)
-    bottom=max(r.bottom for r in rects)
-    rect=pygame.Rect(left,top,right-left,bottom-top)
-    if rect.width<2 or rect.height<2: return cell
-    # Expand crop padding, then intersect with cell bounds. clamp_ip is not
-    # suitable for oversized rectangles because it can leave size unchanged.
-    rect=rect.inflate(pad*2,pad*2).clip(cell.get_rect())
-    if rect.width<=0 or rect.height<=0: return cell
-    # Final defensive check before subsurface.
-    if rect.left<0 or rect.top<0 or rect.right>cell.get_width() or rect.bottom>cell.get_height():
-        return cell
-    return cell.subsurface(rect).copy()
-
-# Directional sprite frames (sheet layouts are treated as 4x4; no external dependencies)
-budi_frames=[crop_sprite(budi_sheet,c,r,4,4) for r in range(4) for c in range(4)]
-sari_frames=[crop_sprite(ind_fighter_sheet,c,r,4,4) for r in range(4) for c in range(4)]
-dutch_frames=[crop_sprite(dutch_sheet,c,r,4,4) for r in range(4) for c in range(4)]
-japan_frames=[crop_sprite(japan_sheet,c,r,4,4) for r in range(4) for c in range(4)]
-# fallbacks if a sheet grid is not aligned: still use any visible crop
-def sprite_from(frames,index,size=(42,48)):
-    fr=frames[index%len(frames)] if frames else None
-    if fr is None: 
-        s=pygame.Surface(size); s.fill((90,60,40)); return s
-    return fit(fr,size)
-
-# dialogue image portraits crop from left side of composite sheets; these assets intentionally include original character art.
-def crop_portrait(img, rect, target=(132,150)):
-    if img is None: return None
-    safe_rect=pygame.Rect(rect).clip(img.get_rect())
-    if safe_rect.width<=0 or safe_rect.height<=0:
+# Transparent sprite sheets: keep the original alpha channel; NEVER color-key black.
+# The uploaded sheets are 4x4 directional grids (rows: front/right/back/left).
+def crop_sprite(sheet, col, row, cols=4, rows=4, pad=2):
+    """Crop a directional frame and trim only transparent padding."""
+    if sheet is None:
         return None
-    c=img.subsurface(safe_rect).copy()
-    c.set_colorkey((0,0,0))
-    # Some dialogue composites use a dark brown backdrop; key that flat backdrop for clean portraits.
-    if img is budi_dialog_asset: c.set_colorkey((43,23,17))
-    elif img is dutch_dialog_asset: c.set_colorkey((41,22,18))
-    return fit(c,target,True)
-budi_portrait=crop_portrait(budi_dialog_asset,(0,0,600,724),(145,150))
-sari_portrait=crop_portrait(sari_dialog_asset,(0,0,600,887),(145,150))
-dutch_portrait=crop_portrait(dutch_dialog_asset,(0,0,600,887),(145,150))
-japan_portrait=crop_portrait(japan_dialog_asset,(0,0,500,724),(145,150))
+    sw, sh = sheet.get_width(), sheet.get_height()
+    x0 = round(col * sw / cols); x1 = round((col + 1) * sw / cols)
+    y0 = round(row * sh / rows); y1 = round((row + 1) * sh / rows)
+    cell = sheet.subsurface((x0, y0, max(1, x1-x0), max(1, y1-y0))).copy().convert_alpha()
+    # Pygame Surface has no PIL-style getchannel(). Scan alpha directly.
+    min_x, min_y = cell.get_width(), cell.get_height()
+    max_x, max_y = -1, -1
+    for yy in range(cell.get_height()):
+        for xx in range(cell.get_width()):
+            if cell.get_at((xx,yy)).a > 0:
+                if xx < min_x: min_x = xx
+                if yy < min_y: min_y = yy
+                if xx > max_x: max_x = xx
+                if yy > max_y: max_y = yy
+    if max_x >= min_x and max_y >= min_y:
+        left=max(0,min_x-pad); top=max(0,min_y-pad)
+        right=min(cell.get_width(),max_x+1+pad); bottom=min(cell.get_height(),max_y+1+pad)
+        cell=cell.subsurface((left,top,max(1,right-left),max(1,bottom-top))).copy()
+    return cell
 
-# Asset-specific dialogue box look: black, crisp white border, speaker name tab.
+budi_frames = [crop_sprite(budi_sheet,c,r,4,4) for r in range(4) for c in range(4)]
+sari_frames = [crop_sprite(ind_fighter_sheet,c,r,4,4) for r in range(4) for c in range(4)]
+dutch_frames = [crop_sprite(dutch_sheet,c,r,4,4) for r in range(4) for c in range(4)]
+japan_frames = [crop_sprite(japan_sheet,c,r,4,4) for r in range(4) for c in range(4)]
+
+def sprite_from(frames, index, size=(74,98)):
+    fr = frames[index % len(frames)] if frames else None
+    if fr is None:
+        fallback = pygame.Surface(size, pygame.SRCALPHA)
+        pygame.draw.rect(fallback,(120,70,35),fallback.get_rect())
+        return fallback
+    target_w, target_h = int(size[0]), int(size[1])
+    fw, fh = fr.get_size()
+    scale = min(target_h/max(1,fh), target_w/max(1,fw))
+    out_w=max(1,int(round(fw*scale))); out_h=max(1,int(round(fh*scale)))
+    return pygame.transform.scale(fr,(out_w,out_h))
+
+# Portraits are taken from the transparent front-facing sprite cells, not from
+# composite screenshots. This avoids brown/black background pixels and cropping glitches.
+budi_portrait = sprite_from(budi_frames,0,(118,118))
+sari_portrait = sprite_from(sari_frames,0,(118,118))
+dutch_portrait = sprite_from(dutch_frames,0,(118,118))
+japan_portrait = sprite_from(japan_frames,0,(118,118))
+
+# Dialogue scene is a small framed panel; portrait and text are integrated
+# inside the lower Undertale-style dialogue box to prevent overlap.
+def fit_cover(img, size):
+    if img is None:
+        return pygame.Surface(size)
+    iw, ih = img.get_size()
+    scale = max(size[0]/iw, size[1]/ih)
+    nw, nh = max(size[0],int(round(iw*scale))), max(size[1],int(round(ih*scale)))
+    scaled = pygame.transform.scale(img,(nw,nh))
+    x = max(0,(nw-size[0])//2); y=max(0,(nh-size[1])//2)
+    return scaled.subsurface((x,y,size[0],size[1])).copy()
+
 def draw_dialogue(speaker, message, portrait=None, prompt=True):
     global dialog_page
-    box=pygame.Rect(20,330,600,132)
+    box = pygame.Rect(18,292,604,170)
     panel(box,BLACK,WHITE,3)
-    # name plaque
-    namew=max(92,FONT.size(speaker)[0]+24)
-    plaque=pygame.Rect(42,315,namew,28)
+    namew = max(92,FONT.size(speaker)[0]+24)
+    plaque = pygame.Rect(38,278,namew,28)
     panel(plaque,BLACK,WHITE,2)
     screen.blit(text(speaker,SMALL),(plaque.x+10,plaque.y+6))
-    tx=190 if portrait else 44
     if portrait:
-        # portrait sits outside the box but does not overlap text
-        screen.blit(fit(portrait,(145,150),True),(26,176))
-    lines=wrap(message,FONT,420 if portrait else 550)
+        portrait_img = fit(portrait,(112,112))
+        screen.blit(portrait_img,(30,326))
+        tx=158; maxw=444
+    else:
+        tx=42; maxw=560
+    lines=wrap(message,FONT,maxw)
     max_lines=4
     pages=max(1,math.ceil(len(lines)/max_lines))
     page=dialog_page%pages
     visible=lines[page*max_lines:(page+1)*max_lines]
     for i,line in enumerate(visible):
-        screen.blit(text(line,FONT),(tx,354+i*24))
+        screen.blit(text(line,FONT),(tx,326+i*27))
     if pages>1:
-        screen.blit(text(f"{page+1}/{pages}",SMALL,GRAY),(555,338))
+        screen.blit(text(f"{page+1}/{pages}",SMALL,GRAY),(555,305))
     if prompt:
-        pygame.draw.polygon(screen,WHITE,[(592,444),(602,444),(597,451)])
+        pygame.draw.polygon(screen,WHITE,[(592,443),(602,443),(597,450)])
 
 def draw_header(title,subtitle=""):
     screen.blit(text(title,TITLE),(20,14))
@@ -252,7 +253,7 @@ BRANCH1=[
 ]
 ]
 # The Chapter 1 third branch uses the kentongan scene embedded in the draft.
-BRANCH1[2]=[(speaker,message,portrait,kentongan_scene) if i<5 else (speaker,message,portrait)
+BRANCH1[2]=[(speaker,message,portrait,map_img) if i<5 else (speaker,message,portrait)
             for i,(speaker,message,portrait) in enumerate(BRANCH1[2])]
 CH2=[
 ("Narator","Ketika pertarungan masih memanas dan pertumpah darah terjadi di mana-mana, ada tenaga medis yang ikut berjuang membantu rakyat Indonesia.",None),
@@ -298,17 +299,12 @@ choice_context=""; values={"Nyali":0,"Harapan":0,"Gema":0}
 battle_id=0; battle_mode="dodge"; battle_t=0; player=pygame.Rect(W//2-7,390,14,14); hazards=[]
 objective_items=[]; objective_count=0; chaser=pygame.Rect(0,0,28,36)
 map_player=pygame.Rect(318,286,18,20); map_obj=None
-map_mode="kentongan"; map_camera_x=0; map_scale=0.0; map_items=[]; map_total_items=0; map_scroll_world=0.0
-map_sari=False; map_mission_timer=0; map_facing=0; map_anim_frame=0; map_patrol=pygame.Rect(820,495,24,32); map_patrol_dir=1
 kentongan_obj_img=None
 if kentongan_sheet:
     try:
-        # Isolated large kentongan from the supplied sprite sheet; crop safely.
-        crop_rect=pygame.Rect(65,35,410,900).clip(kentongan_sheet.get_rect())
-        kentongan_obj_img=kentongan_sheet.subsurface(crop_rect).copy()
+        kentongan_obj_img=kentongan_sheet.subsurface((390,20,260,980)).copy()
         kentongan_obj_img.set_colorkey((62,44,41))
-        kentongan_obj_img.set_colorkey((44,29,27))
-        kentongan_obj_img=fit(kentongan_obj_img,(28,52))
+        kentongan_obj_img=fit(kentongan_obj_img,(24,40))
     except Exception:
         kentongan_obj_img=None
 map_active=False; map_message=""; map_found=False
@@ -322,9 +318,8 @@ def set_dialog(lines,next_state):
 dialog_next=""
 
 def start_battle(number, mode="dodge", after="BATTLE_WIN"):
-    global state,battle_id,battle_mode,battle_t,hazards,player,battle_after,objective_items,objective_count,chaser,battle_hp
+    global state,battle_id,battle_mode,battle_t,hazards,player,battle_after,objective_items,objective_count,chaser
     battle_id=number; battle_mode=mode; battle_t=0; hazards=[]
-    battle_hp=100
     objective_items=[]; objective_count=0
     player.center=(W//2,370); chaser.center=(W//2,125)
     battle_after=after
@@ -333,19 +328,19 @@ def start_battle(number, mode="dodge", after="BATTLE_WIN"):
 battle_after=""
 
 def draw_dialog_state():
-    # story background placeholder uses source-map palette / original images as provided
-    screen.fill((30,20,15))
-    if map_img:
-        bg=fit(map_img,(W,H))
-        screen.blit(bg,(0,0))
-        overlay=pygame.Surface((W,H),pygame.SRCALPHA); overlay.fill((0,0,0,110)); screen.blit(overlay,(0,0))
-    if dialog_i<len(dialog_list):
+    screen.fill((22,16,12))
+    if dialog_i < len(dialog_list):
         item=dialog_list[dialog_i]
         speaker,msg,portrait=item[:3]
-        bg=item[3] if len(item)>3 else frontline_bg
+        bg=item[3] if len(item)>3 and item[3] is not None else map_img
+        scene=pygame.Rect(64,42,512,226)
+        panel(scene,(18,14,12),WHITE,3)
         if bg:
-            screen.blit(fit(bg,(W,H)),(0,0))
-            shade=pygame.Surface((W,H),pygame.SRCALPHA); shade.fill((0,0,0,85)); screen.blit(shade,(0,0))
+            screen.blit(fit_cover(bg,(scene.w-8,scene.h-8)),(scene.x+4,scene.y+4))
+        # dark translucent overlay keeps scene atmospheric without covering it
+        shade=pygame.Surface((scene.w-8,scene.h-8),pygame.SRCALPHA)
+        shade.fill((0,0,0,28))
+        screen.blit(shade,(scene.x+4,scene.y+4))
         draw_dialogue(speaker,msg,portrait)
 
 def choice_screen():
@@ -358,84 +353,131 @@ def choice_screen():
         draw_wrapped(prefix+opt,r.x+22,r.y+20,r.w-44,FONT,GOLD if i==choice_i else WHITE)
     screen.blit(text("UP/DOWN  •  ENTER",SMALL,GRAY),(20,430))
 
-# Overworld collision is defined in the original landscape's pixel coordinates.
-# The broad horizontal village road and connecting roads are walkable; fields/buildings are blocked.
-MAP_SRC_W, MAP_SRC_H = (surabaya_overworld.get_size() if surabaya_overworld else (2048,682))
-MAP_VIEW_H=430
-MAP_SCALE=MAP_VIEW_H/MAP_SRC_H
-MAP_SCALED_W=int(MAP_SRC_W*MAP_SCALE)
-MAP_ROADS=[
-    pygame.Rect(0,475,MAP_SRC_W,92),                    # main village road
-    pygame.Rect(610,250,150,315),                      # road near central village
-    pygame.Rect(1130,235,170,330),                     # road toward fields
-    pygame.Rect(1470,500,250,180),                      # bridge/road at right
-    pygame.Rect(300,500,340,100),                       # west connecting road
-]
+# Map mission: the player can only walk inside the white road mask.
+walk_mask_img = asset("walkable_mask.png")
+walk_mask = walk_mask_img if walk_mask_img else None
+MAP_W, MAP_H = (map_world.get_size() if map_world else (2048,1024))
+map_player = pygame.Rect(0,0,34,28)
+map_mode = "kentongan"
+map_dir = 0
+map_anim = 0
+map_found = False
+map_message = ""
+map_camera_x = 0
+map_camera_y = 0
+map_medicine_items = []
+map_medicine_count = 0
+map_hp = 100
+map_chaser = pygame.Rect(0,0,34,28)
+map_chaser_dir = 3
+map_hit_cooldown = 0
+map_start_pos = (220,565)
+map_target_rect = pygame.Rect(0,0,36,52)
+map_reset_flash = 0
+map_random_target = (0,0)
+map_enemy_walk_timer = 0
+kentongan_obj_img = asset("kentongan_object.png")
 
 def on_walkable(x,y):
-    # A point is walkable only on one of the road bands.
-    return any(r.collidepoint(int(x),int(y)) for r in MAP_ROADS)
+    if walk_mask is None:
+        return 0 <= x <= MAP_W and 490 <= y <= 590
+    x=int(x); y=int(y)
+    if x<0 or y<0 or x>=walk_mask.get_width() or y>=walk_mask.get_height():
+        return False
+    return walk_mask.get_at((x,y))[0] > 0
+
+def player_foot_ok(rect):
+    return on_walkable(rect.centerx,rect.bottom-3)
+
+def random_road_point():
+    # Sample only walkable positions so the patrol never chooses an inaccessible target.
+    for _ in range(250):
+        x=random.randrange(80,MAP_W-80)
+        y=random.randrange(500,580)
+        if on_walkable(x,y):
+            return (x,y)
+    return (580,585)
 
 def start_map(mode="kentongan"):
-    global state,map_active,map_message,map_found,map_obj,map_player,map_mode,map_camera_x,map_scale,map_items,map_total_items,map_sari,map_mission_timer,map_facing,map_anim_frame,map_patrol,map_patrol_dir
-    state="MAP"; map_active=True; map_mode=mode; map_found=False; map_camera_x=0; map_mission_timer=0
-    map_scale=MAP_SCALE
-    map_message="Cari kentongan. Dekati objek lalu tekan E." if mode=="kentongan" else "Cari 3 paket obat di sepanjang jalan."
-    map_player=pygame.Rect(100,495,22,30); map_facing=0; map_anim_frame=0; map_patrol=pygame.Rect(820,495,24,32); map_patrol_dir=1
+    global state,map_active,map_message,map_found,map_obj,map_player,map_mode
+    global map_medicine_items,map_medicine_count,map_hp,map_chaser,map_start_pos,map_dir,map_anim,map_chaser_dir,map_hit_cooldown
+    global map_reset_flash,map_random_target,map_enemy_walk_timer
+    state="MAP"; map_active=True; map_mode=mode; map_found=False
+    map_medicine_items=[]; map_medicine_count=0; map_hp=100
+    map_reset_flash=0; map_enemy_walk_timer=0
     if mode=="kentongan":
-        map_obj=pygame.Rect(690,500,28,52)
-        map_items=[]; map_total_items=0; map_sari=False
+        map_message="Cari kentongan di jalan desa. Dekati objek lalu tekan E."
+        map_start_pos=(220,545)
+        map_obj=pygame.Rect(1500,545,34,42)
     else:
-        map_obj=None; map_total_items=3; map_sari=True
-        # medicine pickup locations on the main road, spread across the scrolling map
-        map_items=[pygame.Rect(350,505,22,22),pygame.Rect(1020,505,22,22),pygame.Rect(1760,505,22,22)]
+        map_message="Cari 3 paket obat. Musuh bergerak acak—hindari sentuhan!"
+        map_start_pos=(180,545)
+        map_obj=None
+        map_medicine_items=[
+            pygame.Rect(520,545,24,24),
+            pygame.Rect(1050,545,24,24),
+            pygame.Rect(1740,545,24,24),
+        ]
+        map_chaser.center=(580,545)
+        map_chaser_dir=random.randrange(4)
+        map_random_target=random_road_point()
+    map_player.center=map_start_pos
+    map_dir=0; map_anim=0; map_hit_cooldown=0
 
-def map_sprite():
-    # Use the supplied character sprite sheet; rows represent facing directions.
-    frames=sari_frames if map_sari else budi_frames
-    idx=(map_facing*4+map_anim_frame)%len(frames)
-    return sprite_from(frames,idx,(30,38))
+def draw_medicine_icon(x,y):
+    # Small pixel-art medical satchel (no external sprite dependency).
+    pygame.draw.rect(screen,(190,55,45),(x-9,y-7,18,15))
+    pygame.draw.rect(screen,(235,210,185),(x-5,y-5,10,11))
+    pygame.draw.rect(screen,(200,45,45),(x-2,y-4,4,9))
+    pygame.draw.rect(screen,(200,45,45),(x-4,y-1,8,3))
+    pygame.draw.rect(screen,(90,40,25),(x-9,y-7,18,15),1)
+
+def map_camera():
+    view_h=H-88
+    cam_x=max(0,min(MAP_W-W,map_player.centerx-W//2))
+    cam_y=max(0,min(MAP_H-view_h,map_player.centery-view_h//2))
+    return int(cam_x),int(cam_y)
 
 def draw_map():
-    global map_camera_x
     screen.fill(BLACK)
-    if surabaya_overworld:
-        scaled=pygame.transform.scale(surabaya_overworld,(MAP_SCALED_W,MAP_VIEW_H))
-        player_screen_x=map_player.centerx*MAP_SCALE
-        # Camera follows horizontally and clamps at both map ends.
-        map_camera_x=max(0,min(MAP_SCALED_W-W,player_screen_x-W*0.48))
-        screen.blit(scaled,(-int(map_camera_x),24))
+    view=pygame.Rect(0,44,W,H-88)
+    camx,camy=map_camera()
+    if map_world:
+        screen.blit(map_world,(view.x-camx,view.y-camy))
     else:
-        screen.fill((90,70,45)); map_camera_x=0
-    # Kentongan or medicine items are drawn in map/world coordinates and follow camera.
-    if map_mode=="kentongan" and not map_found and map_obj:
-        ox=int(map_obj.x*MAP_SCALE-map_camera_x); oy=int(map_obj.y*MAP_SCALE+24)
-        if -60<ox<W+60:
-            if kentongan_obj_img: screen.blit(kentongan_obj_img,(ox,oy-20))
-            else: pygame.draw.rect(screen,(180,100,30),(ox,oy,24,40))
-        label="KENTONGAN"
-        if -80<ox<W+80: screen.blit(text(label,SMALL,GOLD),(ox-8,oy-34))
+        screen.fill((75,60,40),view)
+    # draw objects in world coordinates, then offset by camera
+    if map_mode=="kentongan" and not map_found:
+        krect=pygame.Rect(map_obj.x-camx,map_obj.y-camy+view.y,map_obj.w,map_obj.h)
+        if kentongan_obj_img:
+            k=fit(kentongan_obj_img,(44,76))
+            screen.blit(k,(krect.x-2,krect.y-8))
+        else:
+            pygame.draw.rect(screen,(145,85,25),krect)
+        screen.blit(text("KENTONGAN",SMALL,GOLD),(krect.x-18,krect.y-22))
+    elif map_mode=="medicine":
+        for item in map_medicine_items:
+            draw_medicine_icon(item.centerx-camx,item.centery-camy+view.y)
+        # pursuer sprite uses Dutch transparent sprite sheet
+        chaser_frame=map_chaser_dir*4+((map_anim//8)%4)
+        enemy=sprite_from(dutch_frames,chaser_frame,(68,92))
+        screen.blit(enemy,(map_chaser.centerx-camx-enemy.get_width()//2, map_chaser.bottom-camy+view.y-enemy.get_height()))
+    # player frame by direction row, walking column
+    frame_col=(map_anim//7)%4
+    frame_idx=map_dir*4+frame_col
+    player_frames=budi_frames if map_mode=="kentongan" else sari_frames
+    p=sprite_from(player_frames,frame_idx,(74,98))
+    screen.blit(p,(map_player.centerx-camx-p.get_width()//2,
+                   map_player.bottom-camy+view.y-p.get_height()))
+    # UI overlays
+    panel(pygame.Rect(8,8,624,34),BLACK,WHITE,2)
+    title="MISI: TEMUKAN KENTONGAN" if map_mode=="kentongan" else "BATTLE 5: CARI OBAT"
+    screen.blit(text(title,SMALL,GOLD),(18,18))
     if map_mode=="medicine":
-        patrol_x=int(map_patrol.centerx*MAP_SCALE-map_camera_x); patrol_y=int(map_patrol.centery*MAP_SCALE+24)
-        if -50<patrol_x<W+50:
-            blit_center(sprite_from(dutch_frames,4,(26,34)),patrol_x,patrol_y)
-        for item in map_items:
-            ix=int(item.x*MAP_SCALE-map_camera_x); iy=int(item.y*MAP_SCALE+24)
-            if -30<ix<W+30:
-                pygame.draw.rect(screen,(230,230,230),(ix,iy,18,18))
-                pygame.draw.rect(screen,(180,40,40),(ix+7,iy+3,4,12))
-                pygame.draw.rect(screen,(180,40,40),(ix+3,iy+7,12,4))
-    # Character sprite on map, positioned by camera; preserve crisp pixel scaling.
-    px=int(map_player.centerx*MAP_SCALE-map_camera_x); py=int(map_player.centery*MAP_SCALE+24)
-    blit_center(map_sprite(),px,py)
-    panel(pygame.Rect(8,8,624,42),BLACK,WHITE,2)
-    if map_mode=="kentongan":
-        screen.blit(text("MISI: TEMUKAN KENTONGAN",SMALL,GOLD),(18,18))
-    else:
-        screen.blit(text(f"MISI SARI: OBAT {map_total_items-len(map_items)}/{map_total_items}",SMALL,GOLD),(18,18))
-    panel(pygame.Rect(8,425,624,44),BLACK,WHITE,2)
-    screen.blit(text(map_message,SMALL),(18,439))
-    screen.blit(text("WASD / ARROWS • E INTERACT",SMALL,WHITE),(390,18))
+        screen.blit(text(f"OBAT {map_medicine_count}/3  •  HINDARI MUSUH",SMALL,WHITE),(365,18))
+    panel(pygame.Rect(8,405,624,67),BLACK,WHITE,2)
+    screen.blit(text(map_message,SMALL),(18,418))
+    screen.blit(text("WASD / ARROWS • E INTERACT" if map_mode=="kentongan" else "WASD / ARROWS • AMBIL OBAT • SENTUH MUSUH = RESET",SMALL,GRAY),(18,446))
 
 def draw_battle():
     screen.fill(BLACK)
@@ -460,8 +502,6 @@ def draw_battle():
     pygame.draw.rect(screen,(220,70,70),(hpbar.x+1,hpbar.y+1, max(0,int((battle_hp/100)*158)),10))
     screen.blit(text("WASD / ARROW KEYS",SMALL),(340,415))
     screen.blit(text(f"TIME {max(0,6-battle_t//60)}",SMALL,GOLD),(500,78))
-    if battle_mode in ("medicine","rescue"):
-        screen.blit(text(f"OBJECTIVE {objective_count}/3",SMALL,GOLD),(90,78))
 
 def begin_choice(which):
     global choice_context,choice_list,choice_i,state
@@ -484,7 +524,7 @@ def route_choice1(index):
 def route_choice2(index):
     global values
     values[["Nyali","Harapan","Gema"][index]]+=1
-    if index==0: set_dialog(BRANCH2[0][:4],"B2_BATTLE5")
+    if index==0: set_dialog(BRANCH2[0][:6],"B2_MAP5")
     elif index==1: set_dialog(BRANCH2[1][:6],"B2_BATTLE6")
     else: set_dialog(BRANCH2[2],"DRAFT_MISSING")
 
@@ -493,7 +533,7 @@ def next_dialog():
     item=dialog_list[dialog_i]
     message=item[1]
     portrait=item[2] if len(item)>2 else None
-    lines=wrap(message,FONT,420 if portrait else 550)
+    lines=wrap(message,FONT,444 if portrait else 560)
     pages=max(1,math.ceil(len(lines)/4))
     if dialog_page+1<pages:
         dialog_page+=1
@@ -512,7 +552,7 @@ def show_branch1_after_battle(index):
         set_dialog(BRANCH1[2][6:],"B1_DONE")
 
 def show_branch2_after_battle(index):
-    if index==0: set_dialog(BRANCH2[0][5:],"CH2_DONE")
+    if index==0: set_dialog(BRANCH2[0][6:],"CH2_DONE")
     else: set_dialog(BRANCH2[1][6:],"CH2_DONE")
 
 def choose_battle_result():
@@ -539,17 +579,24 @@ while running:
                     if choice_context=="CHAPTER 1": route_choice1(choice_i)
                     else: route_choice2(choice_i)
             elif state=="MAP":
-                if event.key==pygame.K_e:
-                    if map_mode=="kentongan" and map_obj and map_player.inflate(48,48).colliderect(map_obj):
-                        map_found=True; map_message="Kentongan ditemukan! Tekan ENTER untuk lanjut cerita."
-                    else: map_message="Dekati objek misi terlebih dahulu."
+                if event.key==pygame.K_e and map_mode=="kentongan":
+                    dx=map_player.centerx-map_obj.centerx
+                    dy=map_player.centery-map_obj.centery
+                    if dx*dx+dy*dy <= 78*78:
+                        map_found=True
+                        map_message="Kentongan ditemukan! Tekan ENTER untuk melanjutkan."
+                    else:
+                        map_message="Kentongan belum terlihat. Jelajahi jalan desa."
                 if event.key==pygame.K_RETURN:
                     if map_mode=="kentongan" and map_found:
                         set_dialog([BRANCH1[2][5]],"B1_BATTLE4")
-                    elif map_mode=="medicine" and len(map_items)==0:
-                        set_dialog(BRANCH2[0][4:7],"B2_B5_RETURN")
+                    elif map_mode=="medicine" and map_medicine_count>=3:
+                        state="B2_B5_POST"
                 if event.key==pygame.K_ESCAPE:
-                    state="CHOICE1" if map_mode=="kentongan" else "CHOICE2"
+                    map_message="Misi harus diselesaikan untuk melanjutkan cerita."
+            elif state=="MAP_LOSE":
+                if event.key in (pygame.K_RETURN,pygame.K_SPACE):
+                    start_map("medicine")
             elif state=="BATTLE":
                 # controls are movement-only; game avoids any real-world weapon depiction
                 if event.key in (pygame.K_LEFT,pygame.K_a): player.x-=10
@@ -578,42 +625,72 @@ while running:
                         else: route_choice2(i)
                         break
 
-    # state update
+    # Continuous map movement (WASD and arrow keys) with road-only collision.
     if state=="MAP":
-        # Patrol continues moving even when the player pauses.
-        if map_mode=="medicine":
-            map_patrol.x += map_patrol_dir*2.0
-            if map_patrol.x<650 or map_patrol.x>1050: map_patrol_dir *= -1
-            if map_patrol.colliderect(map_player):
-                map_player.x=max(80,map_player.x-70)
-                map_message="Patroli menghadang! Cari celah dan lanjutkan mencari obat."
         keys=pygame.key.get_pressed()
-        speed=5.5
-        dx=(keys[pygame.K_d] or keys[pygame.K_RIGHT])-(keys[pygame.K_a] or keys[pygame.K_LEFT])
-        dy=(keys[pygame.K_s] or keys[pygame.K_DOWN])-(keys[pygame.K_w] or keys[pygame.K_UP])
+        dx=(1 if keys[pygame.K_d] or keys[pygame.K_RIGHT] else 0) - (1 if keys[pygame.K_a] or keys[pygame.K_LEFT] else 0)
+        dy=(1 if keys[pygame.K_s] or keys[pygame.K_DOWN] else 0) - (1 if keys[pygame.K_w] or keys[pygame.K_UP] else 0)
+        if dx and dy:
+            dx*=0.7071; dy*=0.7071
+        move_speed=3.8
         if dx or dy:
-            # Update facing row; animation cycles only while walking.
-            if abs(dx)>abs(dy): map_facing=2 if dx>0 else 1
-            else: map_facing=0 if dy>0 else 3
-            map_anim_frame=(pygame.time.get_ticks()//120)%4
-            # Normalize diagonal speed and use road collision at the player's four corners.
-            length=math.sqrt(dx*dx+dy*dy); dx=dx/length*speed; dy=dy/length*speed
-            nx=map_player.x+dx; ny=map_player.y+dy
-            corners=[(nx+2,ny+2),(nx+map_player.w-3,ny+2),(nx+2,ny+map_player.h-3),(nx+map_player.w-3,ny+map_player.h-3)]
-            if all(on_walkable(px,py) for px,py in corners):
-                map_player.x=nx; map_player.y=ny
-            # A Dutch patrol moves along the road during the medicine mission.
-            if map_mode=="medicine":
-                if map_patrol.colliderect(map_player):
-                    map_player.x=max(80,map_player.x-70)
-                    map_message="Patroli menghadang! Cari celah dan lanjutkan mencari obat."
-                # Mission pickup: Sari collects medicine packages by touching them.
-                for item in map_items[:]:
-                    if map_player.colliderect(item.inflate(18,18)):
-                        map_items.remove(item)
-                        map_message=f"Obat ditemukan! {map_total_items-len(map_items)}/{map_total_items}"
-                        if not map_items: map_message="Semua obat terkumpul! Tekan ENTER untuk kembali."
-    
+            map_anim+=1
+            if dx>0: map_dir=1
+            elif dx<0: map_dir=3
+            elif dy>0: map_dir=0
+            elif dy<0: map_dir=2
+            # Test movement by the player's feet, keeping each axis independent.
+            test=map_player.copy()
+            test.x+=int(round(dx*move_speed))
+            if player_foot_ok(test):
+                map_player.x=test.x
+            test=map_player.copy()
+            test.y+=int(round(dy*move_speed))
+            if player_foot_ok(test):
+                map_player.y=test.y
+        else:
+            map_anim=0
+        if map_mode=="medicine":
+            for item in map_medicine_items[:]:
+                if map_player.colliderect(item.inflate(18,18)):
+                    map_medicine_items.remove(item)
+                    map_medicine_count+=1
+                    map_message=f"Paket obat ditemukan {map_medicine_count}/3."
+            # Random waypoint patrol on the road. It does not chase the player.
+            map_enemy_walk_timer += 1
+            if map_enemy_walk_timer >= random.randint(45,100):
+                map_enemy_walk_timer=0
+                map_random_target=random_road_point()
+            target_x,target_y=map_random_target
+            chase_dx=target_x-map_chaser.centerx; chase_dy=target_y-map_chaser.centery
+            if abs(chase_dx)>=abs(chase_dy):
+                map_chaser_dir=1 if chase_dx>0 else 3
+            else:
+                map_chaser_dir=0 if chase_dy>0 else 2
+            dist=max(1,math.hypot(chase_dx,chase_dy))
+            enemy_speed=1.65
+            step_x=int(round(chase_dx/dist*enemy_speed)); step_y=int(round(chase_dy/dist*enemy_speed))
+            test=map_chaser.copy(); test.x+=step_x
+            if player_foot_ok(test): map_chaser.x=test.x
+            test=map_chaser.copy(); test.y+=step_y
+            if player_foot_ok(test): map_chaser.y=test.y
+            if map_chaser.colliderect(map_player):
+                map_message="Kena musuh! Misi diulang dari awal."
+                map_reset_flash=90
+                map_player.center=map_start_pos
+                map_medicine_count=0
+                map_medicine_items=[pygame.Rect(520,545,24,24),pygame.Rect(1050,545,24,24),pygame.Rect(1740,545,24,24)]
+                map_chaser.center=(580,545)
+                map_random_target=random_road_point()
+                map_enemy_walk_timer=0; map_hit_cooldown=0; map_anim=0
+            elif map_reset_flash>0:
+                map_reset_flash-=1
+                if map_reset_flash==1:
+                    map_message="Cari 3 paket obat. Musuh bergerak acak—hindari sentuhan!"
+            if map_medicine_count>=3 and state=="MAP":
+                map_message="Semua obat ditemukan! Tekan ENTER untuk kembali."
+
+    # state update
     if state=="BATTLE":
         battle_t+=1
         if battle_t%32==0:
@@ -621,7 +698,7 @@ while running:
             count=2 if battle_mode=="dodge" else 1
             for _ in range(count):
                 hazards.append(pygame.Rect(random.randint(105,530),95,7,17))
-        if battle_mode in ("medicine","rescue") and battle_t%95==0 and objective_count<3 and len(objective_items)<3:
+        if battle_mode in ("medicine","rescue") and battle_t%95==0 and objective_count<3:
             objective_items.append(pygame.Rect(random.randint(115,515),random.randint(125,365),16,16))
         if battle_mode=="medicine":
             # One pursuer follows the player, as requested for Battle 5.
@@ -658,6 +735,12 @@ while running:
         screen.blit(text("TANTANGAN GAGAL",BIG,RED),(80,155))
         screen.blit(text("ENTER untuk mencoba lagi.",FONT),(80,205))
         screen.blit(text("ESC tidak digunakan — restart dengan ENTER.",SMALL),(80,270))
+    elif state=="MAP_LOSE":
+        screen.fill(BLACK)
+        panel(pygame.Rect(55,115,530,235),BLACK,WHITE,3)
+        screen.blit(text("MISI TERHAMBAT",BIG,GOLD),(90,155))
+        draw_wrapped("Sari perlu mencoba jalur pencarian obat sekali lagi.",90,210,460,FONT,WHITE)
+        screen.blit(text("ENTER / SPACE — COBA LAGI",SMALL),(90,290))
     elif state=="TITLE": draw_title()
     elif state=="DIALOG": draw_dialog_state()
     elif state=="CHOICE": choice_screen()
@@ -703,12 +786,12 @@ while running:
         set_dialog(CH2,"CHOICE2")
     elif state=="CHOICE2":
         begin_choice(2)
-    elif state=="B2_BATTLE5":
+    elif state=="B2_MAP5":
         start_map("medicine")
+    elif state=="B2_BATTLE5":
+        battle_hp=100; start_battle(5,"medicine","B2_B5_POST")
     elif state=="B2_BATTLE6":
         battle_hp=100; start_battle(6,"rescue","B2_B6_POST")
-    elif state=="B2_B5_RETURN":
-        set_dialog(BRANCH2[0][7:],"CH2_DONE")
     elif state=="B2_B5_POST":
         show_branch2_after_battle(0)
     elif state=="B2_B6_POST":
